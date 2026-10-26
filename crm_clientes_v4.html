@@ -9,6 +9,8 @@
 *{box-sizing:border-box} body{margin:0}.wrap{max-width:1180px;margin:auto;padding:22px}
 .top{background:linear-gradient(135deg,#0b5f6c,#16889a);color:#fff;padding:24px;border-radius:14px;margin-bottom:18px;box-shadow:0 14px 34px #0f667429}
 .top h1{margin:0 0 6px}.bar,.actions,.recordsbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.recordfilters{display:grid;grid-template-columns:minmax(260px,2fr) repeat(3,minmax(150px,1fr)) auto;gap:10px;align-items:end;margin:10px 0 12px;padding:12px;background:#f7fbfc;border:1px solid #d8e5e8;border-radius:10px}
+.recordfilters .btn{height:42px}
 .card{background:#fff;border:1px solid #d8e2e5;border-radius:14px;padding:18px;margin:16px 0;box-shadow:0 2px 8px #0000000d}
 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .field label{font-size:13px;font-weight:700;display:block;margin-bottom:6px}
@@ -34,8 +36,8 @@
 .kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:14px}
 .kpi{padding:14px;border:1px solid #d8e5e8;border-radius:12px;background:#f8fbfc}.kpi span{font-size:12px;color:#60737a;font-weight:700}.kpi b{display:block;font-size:24px;color:#0f6674;margin-top:4px}
 .note{background:#fff6d9;border:1px solid #ecd98a;padding:10px;border-radius:8px;margin-top:12px}
-@media(max-width:900px){.lookup{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr 1fr}.kpis{grid-template-columns:1fr 1fr}}
-@media(max-width:560px){.lookup,.grid,.kpis{grid-template-columns:1fr}.actions .btn{width:100%}}
+@media(max-width:900px){.lookup{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr 1fr}.kpis{grid-template-columns:1fr 1fr}.recordfilters{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.lookup,.grid,.kpis,.recordfilters{grid-template-columns:1fr}.actions .btn{width:100%}.recordfilters .btn{width:100%}}
 
 .importbox{border:2px dashed #8bbcc4;background:#f7fbfc;border-radius:14px;padding:16px}
 .importgrid{display:grid;grid-template-columns:minmax(240px,1fr) auto auto;gap:10px;align-items:end}
@@ -104,9 +106,31 @@
 
   <div class="card">
     <h2>Procurar e editar registos</h2>
+    <div class="recordfilters" aria-label="Filtros de pesquisa de clientes">
+      <div class="field">
+        <label for="recordFilter">Pesquisa</label>
+        <input id="recordFilter" placeholder="Nome, NIF, zona, telefone, email…">
+      </div>
+      <div class="field">
+        <label for="recordDistrictFilter">Distrito</label>
+        <select id="recordDistrictFilter"><option value="">Todos os distritos</option></select>
+      </div>
+      <div class="field">
+        <label for="recordSellerFilter">Vendedor</label>
+        <select id="recordSellerFilter"><option value="">Todos os vendedores</option></select>
+      </div>
+      <div class="field">
+        <label for="recordStatusFilter">Estado</label>
+        <select id="recordStatusFilter">
+          <option value="">Ativos e inativos</option>
+          <option value="active">Ativos</option>
+          <option value="inactive">Inativos</option>
+        </select>
+      </div>
+      <button class="btn secondary" id="clearRecordFilters" type="button">Limpar filtros</button>
+    </div>
     <div class="recordsbar">
       <b>Registos carregados</b>
-      <input id="recordFilter" placeholder="Pesquisar nome, NIF, distrito, zona, vendedor…" style="height:38px;min-width:300px;padding:8px 10px;border:1px solid #bfcfd4;border-radius:8px">
       <button class="btn secondary" id="showPrevious">◀ Anteriores</button>
       <button class="btn secondary" id="showNext">Seguintes ▶</button>
       <span class="muted" id="recordPage"></span>
@@ -406,10 +430,32 @@ async function reloadCurrentRows(){
   return loadRows(currentLoadMode,currentLoadValue);
 }
 
+function updateRecordFilterOptions(){
+  const filters=[
+    {id:'recordDistrictFilter',field:'district',label:'Todos os distritos'},
+    {id:'recordSellerFilter',field:'Vendedor',label:'Todos os vendedores'}
+  ];
+  filters.forEach(({id,field,label})=>{
+    const select=document.getElementById(id),selected=select.value;
+    const values=[...new Set(rows.map(r=>String(r[field]??'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt',{sensitivity:'base'}));
+    select.innerHTML=`<option value="">${label}</option>`+values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    select.value=values.includes(selected)?selected:'';
+  });
+}
+
 function filteredRows(){
   const q=document.getElementById('recordFilter').value.trim().toLowerCase();
-  if(!q)return rows;
-  return rows.filter(r=>[r.id,r.source_key,r.name,r.nif,r.district,r.zone,r.phone,r.email,r.owner_id,r.owner_name,r.Vendedor,r.created_by,r.updated_by].some(v=>String(v??'').toLowerCase().includes(q)));
+  const district=document.getElementById('recordDistrictFilter').value;
+  const seller=document.getElementById('recordSellerFilter').value;
+  const status=document.getElementById('recordStatusFilter').value;
+  return rows.filter(r=>{
+    const matchesText=!q||[r.id,r.source_key,r.name,r.nif,r.district,r.zone,r.phone,r.email,r.owner_id,r.owner_name,r.Vendedor,r.created_by,r.updated_by].some(v=>String(v??'').toLowerCase().includes(q));
+    const matchesDistrict=!district||String(r.district??'')===district;
+    const matchesSeller=!seller||String(r.Vendedor??'')===seller;
+    const isActive=r.active===true||String(r.active).toLowerCase()==='true';
+    const matchesStatus=!status||(status==='active'?isActive:!isActive);
+    return matchesText&&matchesDistrict&&matchesSeller&&matchesStatus;
+  });
 }
 
 function updateStatus(){
@@ -430,6 +476,7 @@ function updateSelectedCount(){
 }
 
 function renderRecords(){
+  updateRecordFilterOptions();
   const all=filteredRows();
   const max=Math.max(0,all.length-PAGE_SIZE);
   recordOffset=Math.min(Math.max(0,recordOffset),max);
@@ -842,6 +889,14 @@ document.getElementById('loadAllBases').onclick=()=>{
 };
 document.getElementById('loadValue').addEventListener('keydown',e=>{if(e.key==='Enter')loadRows()});
 document.getElementById('recordFilter').addEventListener('input',()=>{recordOffset=0;renderRecords()});
+['recordDistrictFilter','recordSellerFilter','recordStatusFilter'].forEach(id=>document.getElementById(id).addEventListener('change',()=>{recordOffset=0;renderRecords()}));
+document.getElementById('clearRecordFilters').onclick=()=>{
+  document.getElementById('recordFilter').value='';
+  document.getElementById('recordDistrictFilter').value='';
+  document.getElementById('recordSellerFilter').value='';
+  document.getElementById('recordStatusFilter').value='';
+  recordOffset=0;renderRecords();
+};
 document.getElementById('showPrevious').onclick=()=>{recordOffset=Math.max(0,recordOffset-PAGE_SIZE);renderRecords()};
 document.getElementById('showNext').onclick=()=>{recordOffset+=PAGE_SIZE;renderRecords()};
 document.getElementById('refresh').onclick=()=>reloadCurrentRows();
