@@ -109,7 +109,7 @@
     <div class="recordfilters" aria-label="Filtros de pesquisa de clientes">
       <div class="field">
         <label for="recordFilter">Pesquisa</label>
-        <input id="recordFilter" placeholder="Nome, NIF, zona, telefone, email, coordenadas…">
+        <input id="recordFilter" placeholder="Nome, NIF, zona, grupo de cliente, associado…">
       </div>
       <div class="field">
         <label for="recordDistrictFilter">Distrito</label>
@@ -153,6 +153,8 @@
           <option value="phone">Telefone</option>
           <option value="email">Email</option>
           <option value="coordenadas">Coordenadas</option>
+          <option value="company_group">Grupo de cliente</option>
+          <option value="associado">Associado</option>
           <option value="owner_id">Owner ID</option>
           <option value="owner_name">Responsável</option>
           <option value="notes">Notas</option>
@@ -230,6 +232,8 @@
               <option value="phone">Telefone</option>
               <option value="email">Email</option>
               <option value="coordenadas">Coordenadas</option>
+              <option value="company_group">Grupo de cliente</option>
+              <option value="associado">Associado</option>
               <option value="owner_id">Owner ID</option>
               <option value="owner_name">Responsável</option>
               <option value="notes">Notas</option>
@@ -273,6 +277,8 @@
       <div class="field"><label>Telefone</label><input id="f-phone"></div>
       <div class="field"><label>Email</label><input id="f-email" type="email"></div>
       <div class="field"><label>Coordenadas</label><input id="f-coordenadas" placeholder="Ex.: 38.7223,-9.1393"></div>
+      <div class="field"><label>Grupo de cliente</label><input id="f-company_group"></div>
+      <div class="field"><label>Associado</label><input id="f-associado"></div>
       <div class="field"><label>Owner ID</label><input id="f-owner_id"></div>
 
       <div class="field"><label>Responsável / Owner Name</label><input id="f-owner_name"></div>
@@ -326,6 +332,26 @@ let loading=false;
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function message(t,ok=false){const m=document.getElementById('msg');m.textContent=t;m.className='msg '+(ok?'ok':'err')}
 function blank(v){return v===null||v===undefined||String(v).trim()===''}
+const EXTRA_FIELD_ALIASES={
+  company_group:['company_group','grupo_cliente','Grupo de Cliente','GRUPO DE CLIENTE'],
+  associado:['associado','Associado','ASSOCIADO']
+};
+function normalizeExtraFields(v){
+  if(v && typeof v==='object' && !Array.isArray(v))return {...v};
+  if(typeof v==='string' && v.trim()){try{const x=JSON.parse(v);return x&&typeof x==='object'&&!Array.isArray(x)?{...x}:{}}catch{return {}}}
+  return {};
+}
+function extraClientValue(record,key){
+  const extra=normalizeExtraFields(record?.extra_fields??record),aliases=EXTRA_FIELD_ALIASES[key]||[key];
+  for(const alias of aliases)if(!blank(extra[alias]))return String(extra[alias]).trim();
+  return '';
+}
+function setExtraClientValue(extra,key,value){
+  const next=normalizeExtraFields(extra),aliases=EXTRA_FIELD_ALIASES[key]||[key];
+  aliases.forEach(alias=>delete next[alias]);
+  const clean=String(value??'').trim();if(clean)next[key]=clean;
+  return next;
+}
 function toLocalDateTime(v){
   if(!v)return '';
   const d=new Date(v); if(isNaN(d))return '';
@@ -453,7 +479,7 @@ function filteredRows(){
   const seller=document.getElementById('recordSellerFilter').value;
   const status=document.getElementById('recordStatusFilter').value;
   return rows.filter(r=>{
-    const matchesText=!q||[r.id,r.source_key,r.name,r.nif,r.district,r.zone,r.phone,r.email,r.coordenadas,r.owner_id,r.owner_name,r.Vendedor,r.created_by,r.updated_by].some(v=>String(v??'').toLowerCase().includes(q));
+    const matchesText=!q||[r.id,r.source_key,r.name,r.nif,r.district,r.zone,r.phone,r.email,r.coordenadas,extraClientValue(r,'company_group'),extraClientValue(r,'associado'),r.owner_id,r.owner_name,r.Vendedor,r.created_by,r.updated_by].some(v=>String(v??'').toLowerCase().includes(q));
     const matchesDistrict=!district||String(r.district??'')===district;
     const matchesSeller=!seller||String(r.Vendedor??'')===seller;
     const isActive=r.active===true||String(r.active).toLowerCase()==='true';
@@ -489,11 +515,11 @@ function renderRecords(){
   const box=document.getElementById('recordsTable');
   box.innerHTML=page.length?`<table>
     <thead><tr>
-      <th class="sel">Sel.</th><th>Nome</th><th>NIF</th><th>Distrito</th><th>Zona</th><th>Telefone</th><th>Email</th><th>Coordenadas</th><th>Responsável</th><th>Vendedor</th><th>Ativo</th><th>Source Key</th>
+      <th class="sel">Sel.</th><th>Nome</th><th>NIF</th><th>Distrito</th><th>Zona</th><th>Telefone</th><th>Email</th><th>Coordenadas</th><th>Grupo de cliente</th><th>Associado</th><th>Responsável</th><th>Vendedor</th><th>Ativo</th><th>Source Key</th>
     </tr></thead>
     <tbody>${page.map(r=>`<tr data-id="${esc(r.id)}" class="${String(r.id)===String(editId)?'active':''}">
       <td class="sel"><input class="rowSelect" type="checkbox" data-id="${esc(r.id)}" ${selectedIds.has(String(r.id))?'checked':''}></td>
-      <td><b>${esc(r.name)}</b></td><td>${esc(r.nif)}</td><td>${esc(r.district)}</td><td>${esc(r.zone)}</td><td>${esc(r.phone)}</td><td>${esc(r.email)}</td><td>${esc(r.coordenadas)}</td><td>${esc(r.owner_name)}</td><td>${esc(r.Vendedor)}</td><td>${r.active===true?'✓':'✕'}</td><td>${esc(r.source_key)}</td>
+      <td><b>${esc(r.name)}</b></td><td>${esc(r.nif)}</td><td>${esc(r.district)}</td><td>${esc(r.zone)}</td><td>${esc(r.phone)}</td><td>${esc(r.email)}</td><td>${esc(r.coordenadas)}</td><td>${esc(extraClientValue(r,'company_group'))}</td><td>${esc(extraClientValue(r,'associado'))}</td><td>${esc(r.owner_name)}</td><td>${esc(r.Vendedor)}</td><td>${r.active===true?'✓':'✕'}</td><td>${esc(r.source_key)}</td>
     </tr>`).join('')}</tbody></table>`:'<div class="muted" style="padding:14px">Sem resultados.</div>';
 
   box.querySelectorAll('tbody tr').forEach(tr=>tr.onclick=e=>{if(e.target.closest('.rowSelect'))return;loadFormById(tr.dataset.id)});
@@ -514,6 +540,8 @@ function loadFormById(id){
     else el.value=r[f]??'';
   }
   document.getElementById('modeLabel').textContent=`Modo: Editar ${r.name||r.id}`;
+  document.getElementById('f-company_group').value=extraClientValue(r,'company_group');
+  document.getElementById('f-associado').value=extraClientValue(r,'associado');
   document.getElementById('modeLabel').className='mode edit';
   document.getElementById('save').textContent='Gravar alterações no Supabase';
   renderRecords();
@@ -524,6 +552,7 @@ function loadFormById(id){
 function clearForm(showMessage=true){
   editId=null;
   FIELDS.forEach(f=>{const el=document.getElementById('f-'+f);if(el)el.value=''});
+  ['company_group','associado'].forEach(f=>document.getElementById('f-'+f).value='');
   document.getElementById('f-active').value='true';
   const chosenBase=document.getElementById('baseSourceKey').value.trim()||currentSourceKey||'';
   document.getElementById('f-source_key').value=chosenBase.toUpperCase()==='TODAS AS BASES'?'':chosenBase;
@@ -540,6 +569,9 @@ function formPayload(){
   if(rawExtra){
     try{extra=JSON.parse(rawExtra)}catch{throw new Error('O campo Extra Fields não contém JSON válido.')}
   }
+  extra=setExtraClientValue(extra,'company_group',document.getElementById('f-company_group').value);
+  extra=setExtraClientValue(extra,'associado',document.getElementById('f-associado').value);
+  if(!Object.keys(extra).length)extra=null;
   const p={
     id:document.getElementById('f-id').value.trim()||null,
     source_key:document.getElementById('f-source_key').value.trim()||null,
@@ -598,7 +630,7 @@ let excelImportRows=[];
 let excelImportValid=[];
 let importSelected=new Set();
 
-const IMPORT_FIELDS=['id','source_key','name','nif','district','zone','phone','email','coordenadas','owner_id','owner_name','notes','extra_fields','active','created_by','updated_by','created_at','updated_at','Vendedor'];
+const IMPORT_FIELDS=['id','source_key','name','nif','district','zone','phone','email','coordenadas','company_group','associado','owner_id','owner_name','notes','extra_fields','active','created_by','updated_by','created_at','updated_at','Vendedor'];
 const IMPORT_REQUIRED=['source_key','name'];
 
 function normHeader(v){
@@ -614,6 +646,8 @@ const CLIENT_HEADER_ALIASES={
   'PHONE':'phone','TELEFONE':'phone','TELEMOVEL':'phone','TELEMÓVEL':'phone','CONTACTO':'phone',
   'EMAIL':'email','E MAIL':'email',
   'COORDINATES':'coordenadas','COORDENADAS':'coordenadas','GPS':'coordenadas','LAT LONG':'coordenadas','LATITUDE LONGITUDE':'coordenadas',
+  'GRUPO DE CLIENTE':'company_group','GRUPO CLIENTE':'company_group','GRUPO_CLIENTE':'company_group','CLIENT GROUP':'company_group',
+  'ASSOCIADO':'associado','ASSOCIADOS':'associado','CLIENTE ASSOCIADO':'associado','ASSOCIATED CLIENT':'associado',
   'OWNER ID':'owner_id','RESPONSAVEL ID':'owner_id','ID RESPONSAVEL':'owner_id',
   'OWNER NAME':'owner_name','RESPONSAVEL':'owner_name','NOME RESPONSAVEL':'owner_name',
   'NOTES':'notes','NOTAS':'notes','OBSERVACOES':'notes','OBSERVAÇÕES':'notes',
@@ -680,7 +714,7 @@ function normalizeClientObject(obj,baseSourceKey){
   if(!Object.keys(r.extra_fields).length)r.extra_fields=null;
   r.created_at=importDateTime(r.created_at);
   r.updated_at=importDateTime(r.updated_at);
-  ['id','source_key','name','nif','district','zone','phone','email','coordenadas','owner_id','owner_name','notes','created_by','updated_by','Vendedor'].forEach(k=>{
+  ['id','source_key','name','nif','district','zone','phone','email','coordenadas','company_group','associado','owner_id','owner_name','notes','created_by','updated_by','Vendedor'].forEach(k=>{
     r[k]=String(r[k]??'').trim();
   });
   return r;
@@ -766,7 +800,7 @@ function renderClientImportPreview(){
   const stats=document.getElementById('importStats');stats.style.display='grid';
   stats.innerHTML=`<div class="importstat"><span>Linhas lidas</span><b>${total}</b></div><div class="importstat"><span>Prontas</span><b>${valid}</b></div><div class="importstat"><span>Por completar</span><b>${invalid}</b></div><div class="importstat"><span>Já existentes/duplicadas</span><b>${dup}</b></div>`;
   document.getElementById('importMissingPanel').style.display=total?'block':'none';
-  const cols=['source_key','name','nif','district','zone','phone','email','coordenadas','owner_id','owner_name','Vendedor','active','notes','created_by','updated_by'];
+  const cols=['source_key','name','nif','district','zone','phone','email','coordenadas','company_group','associado','owner_id','owner_name','Vendedor','active','notes','created_by','updated_by'];
   const box=document.getElementById('importPreview');box.style.display='block';
   box.innerHTML=excelImportRows.length?`<table><thead><tr><th>Sel.</th><th>Estado</th>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${excelImportRows.slice(0,1000).map(x=>{
     const cls=x.duplicate?'dup':x.errors.length?'bad':'ready';
@@ -818,10 +852,13 @@ async function readClientExcelFile(){
 }
 function payloadFromClientImport(r){
   const p={...r};
+  let extra=setExtraClientValue(p.extra_fields,'company_group',p.company_group);
+  extra=setExtraClientValue(extra,'associado',p.associado);
+  delete p.company_group;delete p.associado;
+  p.extra_fields=Object.keys(extra).length?extra:null;
   if(!p.id)delete p.id;
   if(!p.created_at)delete p.created_at;
   if(!p.updated_at)delete p.updated_at;
-  if(p.extra_fields===undefined)p.extra_fields=null;
   return p;
 }
 
@@ -937,7 +974,8 @@ document.getElementById('applyBulk').onclick=async()=>{
   const btn=document.getElementById('applyBulk');btn.disabled=true;
   try{
     for(const id of ids){
-      const payload={[field]:value};
+      const current=rows.find(r=>String(r.id)===String(id));
+      const payload=EXTRA_FIELD_ALIASES[field]?{extra_fields:setExtraClientValue(current?.extra_fields,field,value)}:{[field]:value};
       await api(`${TABLE}?id=eq.${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(payload),prefer:'return=minimal'});
     }
     sessionSaved+=ids.length;selectedIds.clear();
